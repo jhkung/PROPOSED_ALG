@@ -45,6 +45,18 @@ elseif strcmp(BENCHMARK, 'LETTER')
     testData   = double(inData(num_train+1:end,2:end))';
     testLabels = inData(num_train+1:end,1)';
     
+elseif strcmp(BENCHMARK, 'SPAM')
+    % 4601 (1813 Spam)
+    % train data: 4101 (2488: non-spam, 1613: spam), test data: 500 (300: non-spam, 200:spam)
+    tempFile    = load('spam/spambase.data');
+    
+    num_train   = 4101;
+    trainData   = tempFile(201:200+num_train,1:end-1)';
+    trainLabels = tempFile(201:200+num_train,end)';
+    
+    testData    = [tempFile(1:200,1:end-1); tempFile(end-299:end,1:end-1)]';
+    testLabels  = [tempFile(1:200,end); tempFile(end-299:end,end)]';
+    
 end
 
 

@@ -1,11 +1,11 @@
 %% Read result of the proposed algorithm for low-power feedforward NN
 clc;    clear;
 
-numBENCHMARK    = 3;
-BENCHMARK_set   = {'MNIST', 'LETTER', 'CNAE-9'};
+numBENCHMARK    = 4;
+BENCHMARK_set   = {'LETTER', 'SPAM'};
 
 for BENCHMARK_idx = 1:numel(BENCHMARK_set)
-    filename    = strcat(BENCHMARK_set{BENCHMARK_idx},'_output.mat');
+    filename    = strcat(BENCHMARK_set{BENCHMARK_idx},'_neuron.mat');
     temp        = load(filename, 'RESULT');
     RESULT      = temp.RESULT;
     

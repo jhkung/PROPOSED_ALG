@@ -7,22 +7,28 @@ clear all;
 close all;
 
 global BENCHMARK;
-% BENCHMARK = 'MNIST';
+BENCHMARK = 'MNIST';
 % BENCHMARK = 'CIFAR10';
 % BENCHMARK = 'LETTER';
-BENCHMARK = 'CNAE-9';
+% BENCHMARK = 'CNAE-9';
+% BENCHMARK = 'SPAM';
+% BENCHMARK = 'SVHN';
 
-global APPRX_TYPE;   APPRX_TYPE = 0;    % 0: apprx. neurons, 1: apprx. synapses  
+global APPRX_TYPE;   APPRX_TYPE = 1;    % 0: apprx. neurons, 1: apprx. synapses  
 
 %% Initialization(1): set MLP Network Architecture
 if strcmp(BENCHMARK, 'MNIST')    
     inputSize  = 28*28;    hiddenSize 	= [12*12, 8*8];    outputSize   = 10;
 elseif strcmp(BENCHMARK, 'CIFAR10')
-    inputSize  = 3*32*32;  hiddenSize   = [32*32];         outputSize   = 10;
+    inputSize  = 32*32;    hiddenSize   = [16*16];         outputSize   = 10;
 elseif strcmp(BENCHMARK, 'LETTER')
     inputSize  = 16;       hiddenSize   = [64];            outputSize   = 26;
 elseif strcmp(BENCHMARK,'CNAE-9')
     inputSize  = 856;      hiddenSize   = [12*12, 8*8];    outputSize   = 9;
+elseif strcmp(BENCHMARK, 'SPAM')
+    inputSize  = 57;       hiddenSize   = [40];            outputSize   = 2;
+elseif strcmp(BENCHMARK, 'SVHN')
+    inputSize  = 32*32;    hiddenSize   = [12*12, 8*8];    outputSize   = 10;
 end
 
 global N_layer;     % number of MLP layers except input layer
@@ -86,6 +92,23 @@ elseif strcmp(BENCHMARK, 'CNAE-9')
     testData = Data(:,(928:1080));
     testLabels = Labels(:,(928:1080));
     testLabels = testLabels((2:10),:);       % 9 classes [1-9]
+elseif strcmp(BENCHMARK, 'SPAM')
+    addpath ../RAW_DATA/spam
+    [ trainData, trainLabels, testData, testLabels_one ] = loadDataSet();
+    
+    trainLabels = onehotEncode(trainLabels);
+    testLabels  = onehotEncode(testLabels_one);
+elseif strcmp(BENCHMARK, 'SVHN')
+    addpath ../RAW_DATA/svhn
+    load('svhn_data_2dim_gray.mat');
+    trainData = train_data_2dim/255;
+    testData  = test_data_2dim/255;
+    
+    train_data_label(train_data_label==10)  = 0;
+    test_data_label(test_data_label==10)    = 0;
+    
+    trainLabels     = onehotEncode(train_data_label);
+    testLabels      = onehotEncode(test_data_label);
 end
 
 
@@ -138,7 +161,7 @@ for test_idx = 1:length(trainPrecSet)
     % prec_rate = zeros(1,num_prec_modes);
     % prec_rate(end) = 1;
     % prec_rate = [rPrec of 32bit, rPrec of 16bit, rPrec of 8bit]
-    prec_rate =  [0 0 1];
+    prec_rate =  [1 0 0];
     [ prec_mat ] = gen_prec_mat(prec_rate, IDX);
         
     
@@ -156,6 +179,9 @@ for test_idx = 1:length(trainPrecSet)
     if strcmp(BENCHMARK, 'CNAE-9')
         pred        = I';
         recog_rate  = mean(cnae_9_data((928:1080),1) == pred(:))
+    elseif strcmp(BENCHMARK, 'SVHN')
+        pred        = (I' - 1);
+        recog_rate  = mean(test_data_label(:) == pred(:))
     else
         pred 		= (I' - 1);
         recog_rate  = mean(testLabels_one(:) == pred(:))
@@ -168,11 +194,11 @@ for test_idx = 1:length(trainPrecSet)
     
     % 2. while loop to achieve optimum precision ratio
     beta = 0.1;     iter = 1;
-    Target_recog_rate = 0.98 * PT_data.avg_accuray;
+    Target_recog_rate = 0.92 * PT_data.avg_accuray;
     prev_recog_rate = recog_rate;
     prev_avg_Pcurr  = avg_Pcurr;
     
-    if (Target_recog_rate < 0.7)
+    if (Target_recog_rate < 0.5)
         error_str = 'SKIP THIS TRAINING SET!!'
         break;
     end
@@ -200,7 +226,10 @@ for test_idx = 1:length(trainPrecSet)
             
             if strcmp(BENCHMARK, 'CNAE-9')
                 pred        = I';
-                recog_rate  = mean(cnae_9_data((928:1080),1) == pred(:))
+                recog_rate1 = mean(cnae_9_data((928:1080),1) == pred(:))
+            elseif strcmp(BENCHMARK, 'SVHN')
+                pred        = (I' - 1);
+                recog_rate1 = mean(test_data_label(:) == pred(:))
             else
                 pred 		= (I' - 1);
                 recog_rate1 = mean(testLabels_one(:) == pred(:));
@@ -224,7 +253,10 @@ for test_idx = 1:length(trainPrecSet)
             
             if strcmp(BENCHMARK, 'CNAE-9')
                 pred        = I';
-                recog_rate  = mean(cnae_9_data((928:1080),1) == pred(:))
+                recog_rate2  = mean(cnae_9_data((928:1080),1) == pred(:))
+            elseif strcmp(BENCHMARK, 'SVHN')
+                pred        = (I' - 1);
+                recog_rate2 = mean(test_data_label(:) == pred(:))
             else
                 pred 		= (I' - 1);
                 recog_rate2 = mean(testLabels_one(:) == pred(:));
@@ -238,26 +270,32 @@ for test_idx = 1:length(trainPrecSet)
             cost_2 = -100;
         end
         
-        if cost_1 > cost_2
-            sprintf(' Cost 1 win !!')
-%             if (recog_rate1 < prev_recog_rate)
-%                 str_msg = '[ABORTED] ACCURACY WORSENED!'
-%                 break
-%             end
-            
-            prev_avg_Pcurr = avg_Pcurr1;           
-            prev_recog_rate = recog_rate1;
-            prec_rate = new_prec_rate_1;
+        
+        % select winner between two options
+        % 1) select an option which meets quality
+        if (recog_rate1 >= Target_recog_rate || recog_rate2 >= Target_recog_rate)
+            if (recog_rate1 >= Target_recog_rate)
+                prev_avg_Pcurr = avg_Pcurr1;
+                prev_recog_rate = recog_rate1;
+                prec_rate = new_prec_rate_1;
+            else
+                prev_avg_Pcurr = avg_Pcurr2;
+                prev_recog_rate = recog_rate2;
+                prec_rate = new_prec_rate_2;
+            end
         else
-            sprintf(' Cost 2 win !!')
-%             if (recog_rate2 < prev_recog_rate)
-%                 str_msg = '[ABORTED] ACCURACY WORSENED!'
-%                 break
-%             end
-            
-            prev_avg_Pcurr = avg_Pcurr2;            
-            prev_recog_rate = recog_rate2;
-            prec_rate = new_prec_rate_2;
+            % 2) otherwise pick one with larger cost
+            if cost_1 > cost_2
+                sprintf(' Cost 1 win !!')
+                prev_avg_Pcurr = avg_Pcurr1;
+                prev_recog_rate = recog_rate1;
+                prec_rate = new_prec_rate_1;
+            else
+                sprintf(' Cost 2 win !!')
+                prev_avg_Pcurr = avg_Pcurr2;
+                prev_recog_rate = recog_rate2;
+                prec_rate = new_prec_rate_2;
+            end
         end
         
         total_hist(iter+1,:) = [ prev_avg_Pcurr, prev_recog_rate, prec_rate]
@@ -272,8 +310,12 @@ for test_idx = 1:length(trainPrecSet)
     RESULT{test_idx}    = total_hist;
 end     % END trainPrecSet iteration
 
-output_filename = strcat(BENCHMARK,'_neuron.mat');
-save(output_filename,'RESULT');
+% if (APPRX_TYPE == 0)
+%     output_filename = strcat(BENCHMARK,'_neuron.mat');
+% else
+%     output_filename = strcat(BENCHMARK,'_synapse.mat');
+% end
+% save(output_filename,'RESULT');
 
 
 
